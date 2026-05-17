@@ -1,0 +1,15 @@
+The vocabulary and merge data in this directory (vocab.json, merges.txt,
+special_tokens.txt) were extracted from the TabiBERT tokenizer released by
+TABILAB at Boğaziçi University and are distributed under the Apache License
+2.0.
+
+Original repository:
+    https://huggingface.co/boun-tabilab/TabiBERT
+
+Paper:
+    Melikşah Türker, Asude Ebrar Kızıloğlu, Onur Güngör, Susan Üsküdarlı
+    (2026). "TabiBERT: A Large-Scale ModernBERT Foundation Model and A
+    Unified Benchmark for Turkish." arXiv:2512.23065.
+
+Full license text:
+    https://www.apache.org/licenses/LICENSE-2.0

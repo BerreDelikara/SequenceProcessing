@@ -1,0 +1,14 @@
+The vocabulary and merge data in this directory (vocab.json, merges.txt,
+special_tokens.txt) were extracted from the Mursit tokenizer released by
+NewmindAI and are distributed under the Apache License 2.0.
+
+Original repository:
+    https://huggingface.co/newmindai/Mursit-Base
+
+Paper:
+    Özgür Uğur et al. (2026). "Mecellem Models: Turkish Models Trained from
+    Scratch and Continually Pre-trained for the Legal Domain."
+    arXiv:2601.16018.
+
+Full license text:
+    https://www.apache.org/licenses/LICENSE-2.0

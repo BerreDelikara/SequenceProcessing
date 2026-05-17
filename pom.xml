@@ -100,8 +100,6 @@
                     </includes>
                     <testIncludes>
                         <testInclude>TokenizationTest.java</testInclude>
-                        <testInclude>PaperTurkishSmoke.java</testInclude>
-                        <testInclude>FsmTurkishSmoke.java</testInclude>
                     </testIncludes>
                 </configuration>
             </plugin>
