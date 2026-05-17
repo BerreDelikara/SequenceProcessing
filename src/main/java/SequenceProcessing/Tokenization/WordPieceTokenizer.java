@@ -2,18 +2,37 @@ package SequenceProcessing.Tokenization;
 
 import java.util.*;
 
+/**
+ * WordPiece tokenizer (Schuster &amp; Nakajima, 2012). Like BPE but selects the
+ * pair to merge by likelihood score {@code freq(AB) / (freq(A) * freq(B))}
+ * rather than raw co-occurrence count. Continuation pieces inside a word are
+ * marked with the prefix {@code ##}.
+ */
 public class WordPieceTokenizer extends Tokenizer {
 
+    /** Prefix attached to subword tokens that do not start a word. */
     public static final String CONTINUATION_PREFIX = "##";
+
+    /** Token returned when a word cannot be segmented from the vocabulary. */
     public static final String UNK = "[UNK]";
 
     private final Set<String> vocabulary;
 
+    /**
+     * Constructs a WordPiece tokenizer with the given target vocabulary size.
+     * @param vocabSize Maximum number of tokens to learn.
+     */
     public WordPieceTokenizer(int vocabSize) {
         super(vocabSize);
         this.vocabulary = new LinkedHashSet<>();
     }
 
+    /**
+     * Builds the WordPiece vocabulary by repeatedly merging the adjacent
+     * token pair with the highest likelihood score until {@link #getVocabSize()}
+     * is reached.
+     * @param corpus List of whitespace-separated sentences.
+     */
     @Override
     public void train(List<String> corpus) {
         vocabulary.clear();
@@ -65,6 +84,13 @@ public class WordPieceTokenizer extends Tokenizer {
         }
     }
 
+    /**
+     * Segments a word using greedy longest-match against the vocabulary.
+     * Pieces after the first carry the {@link #CONTINUATION_PREFIX}. Returns
+     * a single {@link #UNK} token if no valid segmentation exists.
+     * @param word The word to tokenize.
+     * @return Ordered list of WordPiece tokens, or {@code [UNK]} on failure.
+     */
     @Override
     public List<String> tokenize(String word) {
         if (vocabulary.isEmpty()) {
@@ -143,6 +169,10 @@ public class WordPieceTokenizer extends Tokenizer {
         return left + rightPart;
     }
 
+    /**
+     * Returns the learned WordPiece vocabulary.
+     * @return Unmodifiable set of all tokens (including {@code ##}-prefixed continuations).
+     */
     public Set<String> getVocabulary() {
         return Collections.unmodifiableSet(vocabulary);
     }

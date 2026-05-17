@@ -2,17 +2,33 @@ package SequenceProcessing.Tokenization;
 
 import java.util.*;
 
+/**
+ * Byte Pair Encoding (BPE) tokenizer. Learns merge rules over character
+ * sequences by iteratively combining the most frequent adjacent symbol pair
+ * until the vocabulary reaches the target size.
+ */
 public class BPETokenizer extends Tokenizer {
 
     private final List<String[]> mergeRules;
     private final Set<String> vocabulary;
 
+    /**
+     * Constructs a BPE tokenizer with the given target vocabulary size.
+     * @param vocabSize Maximum number of tokens (including base characters) to learn.
+     */
     public BPETokenizer(int vocabSize) {
         super(vocabSize);
         this.mergeRules = new ArrayList<>();
         this.vocabulary = new LinkedHashSet<>();
     }
 
+    /**
+     * Learns BPE merge rules from the corpus. Each word is initialised as a
+     * sequence of characters terminated by the end-of-word marker {@code </w>};
+     * the most frequent adjacent pair is merged repeatedly until the vocabulary
+     * reaches {@link #getVocabSize()}.
+     * @param corpus List of whitespace-separated sentences.
+     */
     @Override
     public void train(List<String> corpus) {
         mergeRules.clear();
@@ -60,6 +76,12 @@ public class BPETokenizer extends Tokenizer {
         }
     }
 
+    /**
+     * Segments a word by applying all learned merge rules in order. If the
+     * tokenizer has not been trained, falls back to character-level splitting.
+     * @param word The word to tokenize.
+     * @return Subword tokens whose concatenation equals the original word.
+     */
     @Override
     public List<String> tokenize(String word) {
         if (mergeRules.isEmpty()) {
@@ -129,10 +151,20 @@ public class BPETokenizer extends Tokenizer {
         return result;
     }
 
+    /**
+     * Returns the learned vocabulary as an unmodifiable set of tokens.
+     * @return All subword tokens learned during training.
+     */
     public Set<String> getVocabulary() {
         return Collections.unmodifiableSet(vocabulary);
     }
 
+    /**
+     * Returns the ordered list of merge rules learned during training.
+     * Each rule is a two-element array {@code [left, right]} indicating that
+     * the pair was merged into the symbol {@code left + right}.
+     * @return Unmodifiable list of merge rules in application order.
+     */
     public List<String[]> getMergeRules() {
         return Collections.unmodifiableList(mergeRules);
     }

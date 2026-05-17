@@ -2,6 +2,13 @@ package SequenceProcessing.Tokenization;
 
 import java.util.*;
 
+/**
+ * Unigram language model tokenizer (Kudo, 2018). Each token has an associated
+ * probability; the vocabulary is initialised from all substrings up to a
+ * maximum length and pruned via expectation-maximisation, repeatedly removing
+ * the least useful tokens until {@link #getVocabSize()} is reached. Inference
+ * uses Viterbi decoding to find the most probable segmentation.
+ */
 public class UnigramTokenizer extends Tokenizer {
 
     private static final int MAX_SUBWORD_LENGTH = 20;
@@ -9,11 +16,22 @@ public class UnigramTokenizer extends Tokenizer {
 
     private Map<String, Double> logProbs;
 
+    /**
+     * Constructs a Unigram tokenizer with the given target vocabulary size.
+     * @param vocabSize Maximum number of tokens to retain after EM pruning.
+     */
     public UnigramTokenizer(int vocabSize) {
         super(vocabSize);
         this.logProbs = new LinkedHashMap<>();
     }
 
+    /**
+     * Trains the unigram model. Initialises the vocabulary from every
+     * substring up to {@value #MAX_SUBWORD_LENGTH} characters, then iteratively
+     * runs EM and prunes the lowest-probability {@value #PRUNE_RATIO} fraction
+     * of multi-character tokens until the vocabulary fits the target size.
+     * @param corpus List of whitespace-separated sentences.
+     */
     @Override
     public void train(List<String> corpus) {
         logProbs.clear();
@@ -91,6 +109,13 @@ public class UnigramTokenizer extends Tokenizer {
         }
     }
 
+    /**
+     * Returns the most probable segmentation of the given word under the
+     * trained unigram model. Falls back to character-level splitting if the
+     * tokenizer has not been trained.
+     * @param word The word to tokenize.
+     * @return Subword tokens whose concatenation equals the original word.
+     */
     @Override
     public List<String> tokenize(String word) {
         if (logProbs.isEmpty()) {
@@ -140,6 +165,10 @@ public class UnigramTokenizer extends Tokenizer {
         return tokens;
     }
 
+    /**
+     * Returns the learned vocabulary mapping each token to its log-probability.
+     * @return Unmodifiable map from token to log-probability (always non-positive).
+     */
     public Map<String, Double> getVocabulary() {
         return Collections.unmodifiableMap(logProbs);
     }
