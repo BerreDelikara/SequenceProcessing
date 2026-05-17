@@ -6,7 +6,7 @@
 
     <groupId>io.github.starlangsoftware</groupId>
     <artifactId>SequenceProcessing</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
     <name>NlpToolkit.SequenceProcessing</name>
@@ -59,7 +59,7 @@
         <dependency>
             <groupId>io.github.starlangsoftware</groupId>
             <artifactId>ComputationalGraph</artifactId>
-            <version>1.0.17</version>
+            <version>1.0.19</version>
         </dependency>
         <dependency>
             <groupId>io.github.starlangsoftware</groupId>
