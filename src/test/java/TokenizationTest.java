@@ -293,4 +293,35 @@ public class TokenizationTest {
         // Capitalized version should have exactly one more token (<uppercase>).
         assertEquals(kitapTokens.size() + 1, kitapTokensCap.size());
     }
+
+    @Test
+    public void turkishDerivationalMorphemesPreservedAcrossDbBoundary() {
+        // çalıştırıldı parses as çalış+VERB^DB+VERB+CAUS^DB+VERB+PASS+POS+PAST+A3SG.
+        // The CAUS and PASS derivational suffixes live in groups after the
+        // first ^DB+. They must not be silently dropped.
+        List<String> tokens = turkish.tokenize("çalıştırıldı");
+        assertEquals(Arrays.asList(
+                TurkishTokenizer.ROOT_PREFIX + "çalış", "CAUS", "PASS", "PAST"),
+                tokens);
+    }
+
+    @Test
+    public void turkishUnmappedDerivationalTagsPassThrough() {
+        // kitaplaşmış has a NOUN→VERB derivation with the BECOME marker, which
+        // is NOT in AFFIX_MAP. The token stream should preserve it as-is
+        // rather than swallow it (the prior policy dropped any unmapped tag).
+        List<String> tokens = turkish.tokenize("kitaplaşmış");
+        assertTrue("BECOME morpheme should be preserved: " + tokens,
+                tokens.contains("BECOME"));
+    }
+
+    @Test
+    public void turkishBareInfPreserved() {
+        // okutturulamamak ends in +NOUN+INF+A3SG+PNON+NOM. The infinitive marker
+        // appears here as the bare "INF" tag (not INF1/INF2/INF3), which means
+        // AFFIX_MAP doesn't rename it. It should still be emitted.
+        List<String> tokens = turkish.tokenize("okutturulamamak");
+        assertTrue("INF morpheme should be preserved: " + tokens,
+                tokens.contains("INF"));
+    }
 }

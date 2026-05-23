@@ -11,11 +11,14 @@ import java.util.regex.Pattern;
  * rules from {@code /tabi-bert/} on the classpath.
  *
  * <p>Vocabulary size: 50,176. Unknown token: {@code [UNK]}.
- * Pre-tokenizer: ModernBERT-style regex shared with {@link MursitTokenizer}.
- * The regex shipped in TabiBERT's own {@code tokenizer.json} contains
- * over-escaped backslashes that would not behave as intended in any standard
- * regex engine; this Java port uses the cleaner equivalent from the
- * ModernBERT-family tokenizer family (same morphological behavior).
+ * Pre-tokenizer: the regex shipped in TabiBERT's own {@code tokenizer.json}
+ * is malformed — it contains over-escaped backslashes (e.g. {@code \\p{N}}
+ * instead of {@code \p{N}}) that no standard regex engine treats as the
+ * intended Unicode property classes. This Java port substitutes the
+ * well-formed equivalent that ships in the sibling ModernBERT-family Turkish
+ * tokenizer ({@link MursitTokenizer}'s {@code tokenizer.json}, verified
+ * byte-for-byte). The two regex literals in this file and {@link MursitTokenizer}
+ * are intentionally identical.
  *
  * <p>License of bundled data: Apache 2.0.
  */

@@ -11,7 +11,8 @@ import java.util.regex.Pattern;
  * rules from {@code /mursit/} on the classpath.
  *
  * <p>Vocabulary size: 59,008. Unknown token: {@code <unk>}.
- * Pre-tokenizer: ModernBERT-style regex from the published tokenizer.
+ * Pre-tokenizer: ModernBERT-style regex extracted byte-for-byte from
+ * Mursit's published {@code tokenizer.json}.
  * License of bundled data: Apache 2.0.
  */
 public class MursitTokenizer extends ByteLevelBPETokenizer {

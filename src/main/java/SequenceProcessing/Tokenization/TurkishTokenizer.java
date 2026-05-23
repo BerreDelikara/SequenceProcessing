@@ -5,8 +5,10 @@ import MorphologicalAnalysis.FsmParse;
 import MorphologicalAnalysis.FsmParseList;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -43,6 +45,19 @@ public class TurkishTokenizer extends Tokenizer {
     private static final Locale TURKISH_LOCALE = new Locale("tr", "TR");
 
     private static final Map<String, String> AFFIX_MAP = createAffixMap();
+
+    /**
+     * FSM tags that carry no morphological content on their own and should not
+     * appear in the token stream: part-of-speech category labels, the default
+     * agreement/case/possessive/polarity markers, and the silent-derivation
+     * marker. Tags not in this set and not in {@link #AFFIX_MAP} pass through
+     * as-is so derivational morphemes like {@code BECOME}, {@code ACQUIRE},
+     * {@code AGT} are preserved.
+     */
+    private static final Set<String> DROP_TAGS = new HashSet<>(Arrays.asList(
+            "NOUN", "VERB", "ADJ", "ADV", "PRON", "DET", "CONJ", "INTERJ",
+            "POSTP", "NUM", "PROP", "CARD", "ORD", "REAL", "RANGE", "PUNC",
+            "A3SG", "PNON", "NOM", "POS", "ZERO"));
 
     private static Map<String, String> createAffixMap() {
         Map<String, String> m = new HashMap<>();
@@ -194,8 +209,10 @@ public class TurkishTokenizer extends Tokenizer {
                 startIndex = 1;
             }
             for (int i = startIndex; i < parts.length; i++) {
-                String mapped = AFFIX_MAP.get(parts[i]);
-                if (mapped != null) tokens.add(mapped);
+                String tag = parts[i];
+                if (tag.isEmpty() || DROP_TAGS.contains(tag)) continue;
+                String mapped = AFFIX_MAP.get(tag);
+                tokens.add(mapped != null ? mapped : tag);
             }
         }
         return tokens;
