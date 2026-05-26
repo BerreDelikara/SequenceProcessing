@@ -17,6 +17,8 @@ import java.util.regex.Pattern;
 public class CosmosGPT2Tokenizer extends ByteLevelBPETokenizer {
 
     private static final String UNKNOWN_TOKEN = "<|endoftext|>";
+    private static final String VOCAB_RESOURCE = "/cosmos-gpt2/vocab.json";
+    private static final String MERGES_RESOURCE = "/cosmos-gpt2/merges.txt";
 
     /** Standard GPT-2 pre-tokenizer regex (Radford et al. 2019). */
     private static final Pattern PRE_TOKENIZER = Pattern.compile(
@@ -29,12 +31,12 @@ public class CosmosGPT2Tokenizer extends ByteLevelBPETokenizer {
 
     @Override
     protected String vocabResourcePath() {
-        return "/cosmos-gpt2/vocab.json";
+        return VOCAB_RESOURCE;
     }
 
     @Override
     protected String mergesResourcePath() {
-        return "/cosmos-gpt2/merges.txt";
+        return MERGES_RESOURCE;
     }
 
     @Override
@@ -45,6 +47,9 @@ public class CosmosGPT2Tokenizer extends ByteLevelBPETokenizer {
     @Override
     protected int resolveUnknownTokenId(Map<String, Integer> vocab) {
         Integer id = vocab.get(UNKNOWN_TOKEN);
-        return id != null ? id : -1;
+            if (id == null) {
+                throw new IllegalStateException("Vocabulary does not contain required unknown token: " + UNKNOWN_TOKEN);
+        }
+        return id;
     }
 }

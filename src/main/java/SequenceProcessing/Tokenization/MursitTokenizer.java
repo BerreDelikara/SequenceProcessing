@@ -18,6 +18,8 @@ import java.util.regex.Pattern;
 public class MursitTokenizer extends ByteLevelBPETokenizer {
 
     private static final String UNKNOWN_TOKEN = "<unk>";
+    private static final String VOCAB_RESOURCE = "/mursit/vocab.json";
+    private static final String MERGES_RESOURCE = "/mursit/merges.txt";
 
     /** ModernBERT-style pre-tokenizer regex extracted from Mursit's tokenizer.json. */
     private static final Pattern PRE_TOKENIZER = Pattern.compile(
@@ -32,12 +34,12 @@ public class MursitTokenizer extends ByteLevelBPETokenizer {
 
     @Override
     protected String vocabResourcePath() {
-        return "/mursit/vocab.json";
+        return VOCAB_RESOURCE;
     }
 
     @Override
     protected String mergesResourcePath() {
-        return "/mursit/merges.txt";
+        return MERGES_RESOURCE;
     }
 
     @Override
@@ -48,6 +50,9 @@ public class MursitTokenizer extends ByteLevelBPETokenizer {
     @Override
     protected int resolveUnknownTokenId(Map<String, Integer> vocab) {
         Integer id = vocab.get(UNKNOWN_TOKEN);
-        return id != null ? id : -1;
+        if (id == null) {
+            throw new IllegalStateException("Vocabulary does not contain required unknown token: " + UNKNOWN_TOKEN);
+        }
+        return id;
     }
 }

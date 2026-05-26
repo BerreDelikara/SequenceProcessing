@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 /**
  * Hybrid morphology-aware Turkish tokenizer following Algorithm 1 of Bayram
@@ -54,10 +56,13 @@ public class TurkishTokenizer extends Tokenizer {
      * as-is so derivational morphemes like {@code BECOME}, {@code ACQUIRE},
      * {@code AGT} are preserved.
      */
-    private static final Set<String> DROP_TAGS = new HashSet<>(Arrays.asList(
+    private static final Set<String> DROP_TAGS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "NOUN", "VERB", "ADJ", "ADV", "PRON", "DET", "CONJ", "INTERJ",
             "POSTP", "NUM", "PROP", "CARD", "ORD", "REAL", "RANGE", "PUNC",
-            "A3SG", "PNON", "NOM", "POS", "ZERO"));
+            "A3SG", "PNON", "NOM", "POS", "ZERO")));
+
+    private static final java.util.regex.Pattern WORD_OR_PUNCTUATION = 
+            Pattern.compile("\\p{L}[\\p{L}\\p{M}\\p{N}']*|\\p{N}+|[^\\s]");
 
     private static Map<String, String> createAffixMap() {
         Map<String, String> m = new HashMap<>();
@@ -104,7 +109,15 @@ public class TurkishTokenizer extends Tokenizer {
     @Override
     public void train(List<String> corpus) {
         List<String> oovSentences = new ArrayList<>();
+        if (corpus == null || corpus.isEmpty()) {
+            fallback.train(oovSentences);
+            return;
+        }
+
         for (String sentence : corpus) {
+            if (sentence == null || sentence.trim().isEmpty()) {
+                continue;
+            }
             StringBuilder oov = new StringBuilder();
             for (String word : sentence.trim().split("\\s+")) {
                 if (word.isEmpty() || isPunctuation(word)) continue;
@@ -118,6 +131,27 @@ public class TurkishTokenizer extends Tokenizer {
             if (oov.length() > 0) oovSentences.add(oov.toString());
         }
         fallback.train(oovSentences);
+    }
+
+    /**
+     * Tokenizes a sentence by separating Turkish words and punctuation first.
+     * This prevents words like "kitaplar," from being sent to the morphological
+     * analyzer together with the comma.
+     */
+    @Override
+    public List<String> encode(String sentence) {
+        List<String> tokens = new ArrayList<>();
+        if (sentence == null || sentence.trim().isEmpty()) {
+            return tokens;
+        }
+
+        Matcher matcher = WORD_OR_PUNCTUATION.matcher(sentence);
+
+        while (matcher.find()) {
+            tokens.addAll(tokenize(matcher.group()));
+        }
+
+        return tokens;
     }
 
     /**
@@ -219,11 +253,11 @@ public class TurkishTokenizer extends Tokenizer {
     }
 
     /**
-     * If the FSM lemma does not literally prefix the input word, try the
-     * standard Turkish lenitions (p->b, t->d, k->g, c->c) and emit the
-     * softened form whose surface actually prefixes the input. Makes
-     * tokenization losslessly recoverable for forms like {@code kitabi}
-     * (lemma {@code kitap}, surface starts with {@code kitab}).
+     * If the FSM lemma does not literally prefix the input word, try common
+     * Turkish consonant softening patterns (p->b, t->d, k->ğ, ç->c) and emit the
+     * softened form whose surface actually prefixes the input. This helps recover
+     * surface roots for forms like {@code kitabi} / {@code kitabı}
+     * where lemma {@code kitap} appears as surface {@code kitab}.
      */
     private String matchRootToInput(String lemma, String inputWord) {
         if (lemma == null || lemma.isEmpty()) return lemma == null ? "" : lemma;

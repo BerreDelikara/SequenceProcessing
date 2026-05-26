@@ -25,6 +25,9 @@ import java.util.regex.Pattern;
 public class TabiBERTTokenizer extends ByteLevelBPETokenizer {
 
     private static final String UNKNOWN_TOKEN = "[UNK]";
+    private static final String VOCAB_RESOURCE = "/tabi-bert/vocab.json";
+    private static final String MERGES_RESOURCE = "/tabi-bert/merges.txt";
+
 
     /** ModernBERT-style pre-tokenizer regex (shared with Mursit). */
     private static final Pattern PRE_TOKENIZER = Pattern.compile(
@@ -39,12 +42,12 @@ public class TabiBERTTokenizer extends ByteLevelBPETokenizer {
 
     @Override
     protected String vocabResourcePath() {
-        return "/tabi-bert/vocab.json";
+        return VOCAB_RESOURCE;
     }
 
     @Override
     protected String mergesResourcePath() {
-        return "/tabi-bert/merges.txt";
+        return MERGES_RESOURCE;
     }
 
     @Override
@@ -55,6 +58,9 @@ public class TabiBERTTokenizer extends ByteLevelBPETokenizer {
     @Override
     protected int resolveUnknownTokenId(Map<String, Integer> vocab) {
         Integer id = vocab.get(UNKNOWN_TOKEN);
-        return id != null ? id : -1;
+            if (id == null) {
+                throw new IllegalStateException("Vocabulary does not contain required unknown token: " + UNKNOWN_TOKEN);
+            }
+        return id;
     }
 }

@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Abstract base for GPT-2-family byte-level BPE tokenizers. Implements the
@@ -62,7 +63,7 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
     protected final Map<String, Integer> mergeRank;
     protected final int unknownTokenId;
 
-    private final Map<String, List<String>> bpeCache = new HashMap<>();
+    private final Map<String, List<String>> bpeCache = new ConcurrentHashMap<>();
 
     /**
      * Constructs the tokenizer by loading {@code vocab.json} and
@@ -212,8 +213,9 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
             symbols = mergeAdjacent(symbols, bestLeft, bestRight);
         }
 
-        bpeCache.put(word, new ArrayList<>(symbols));
-        return symbols;
+        List<String> result = new ArrayList<>(symbols);
+        bpeCache.put(word, result);
+        return new ArrayList<>(result);
     }
 
     private static List<String> mergeAdjacent(List<String> symbols, String left, String right) {
