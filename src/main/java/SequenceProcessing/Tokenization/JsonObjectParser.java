@@ -23,7 +23,7 @@ final class JsonObjectParser {
      *                          supported subset.
      */
     static Map<String, Integer> parse(String text) {
-        State s = new State(text);
+        JsonParserState s = new JsonParserState(text);
         // Consume the opening brace of the top-level object.
         skipWs(s);
         expect(s, '{');
@@ -54,7 +54,7 @@ final class JsonObjectParser {
         return result;
     }
 
-    private static String readString(State s) {
+    private static String readString(JsonParserState s) {
         // Consume the opening quote.
         if (peek(s) != '"') throw err(s, "expected '\"' to start string");
         s.i++;
@@ -96,7 +96,7 @@ final class JsonObjectParser {
         throw err(s, "unterminated string");
     }
 
-    private static int readInt(State s) {
+    private static int readInt(JsonParserState s) {
         int start = s.i;
         if (peek(s) == '-') s.i++;
         while (s.i < s.text.length() && Character.isDigit(s.text.charAt(s.i))) s.i++;
@@ -104,27 +104,22 @@ final class JsonObjectParser {
         return Integer.parseInt(s.text.substring(start, s.i));
     }
 
-    private static void skipWs(State s) {
+    private static void skipWs(JsonParserState s) {
         while (s.i < s.text.length() && Character.isWhitespace(s.text.charAt(s.i))) s.i++;
     }
 
-    private static char peek(State s) {
+    private static char peek(JsonParserState s) {
         if (s.i >= s.text.length()) throw err(s, "unexpected end of input");
         return s.text.charAt(s.i);
     }
 
-    private static void expect(State s, char c) {
+    private static void expect(JsonParserState s, char c) {
         if (peek(s) != c) throw err(s, "expected '" + c + "', got '" + peek(s) + "'");
         s.i++;
     }
 
-    private static RuntimeException err(State s, String msg) {
+    private static RuntimeException err(JsonParserState s, String msg) {
         return new RuntimeException("JSON parse error at offset " + s.i + ": " + msg);
     }
 
-    private static final class State {
-        final String text;
-        int i;
-        State(String text) { this.text = text; }
-    }
 }
