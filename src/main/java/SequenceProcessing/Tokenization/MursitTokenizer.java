@@ -28,6 +28,9 @@ public class MursitTokenizer extends ByteLevelBPETokenizer {
                     + "|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
             Pattern.UNICODE_CHARACTER_CLASS);
 
+    /**
+     * Loads the bundled Mursit vocabulary and merge rules from the classpath.
+     */
     public MursitTokenizer() {
         super();
     }

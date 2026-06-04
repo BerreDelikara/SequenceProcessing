@@ -25,6 +25,9 @@ public class CosmosGPT2Tokenizer extends ByteLevelBPETokenizer {
             "'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)|\\s+",
             Pattern.UNICODE_CHARACTER_CLASS);
 
+    /**
+     * Loads the bundled CosmosGPT2 vocabulary and merge rules from the classpath.
+     */
     public CosmosGPT2Tokenizer() {
         super();
     }

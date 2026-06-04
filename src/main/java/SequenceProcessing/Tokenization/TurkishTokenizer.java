@@ -105,9 +105,14 @@ public class TurkishTokenizer extends Tokenizer {
      * morphological analyzer cannot parse. Words it can parse are excluded so
      * the BPE vocabulary focuses on residual stems and out-of-dictionary forms
      * (per Bayram et al. 2026, Section 3).
+     * @param corpus Sentences used for training; only the OOV subset is forwarded
+     *               to the BPE fallback.
      */
     @Override
     public void train(List<String> corpus) {
+        // Build an OOV-only sub-corpus: keep only words the FSM analyzer can't parse,
+        // so the BPE fallback specializes on residual forms rather than re-learning
+        // morphology the analyzer already covers.
         List<String> oovSentences = new ArrayList<>();
         if (corpus == null || corpus.isEmpty()) {
             fallback.train(oovSentences);
@@ -120,9 +125,14 @@ public class TurkishTokenizer extends Tokenizer {
             }
             StringBuilder oov = new StringBuilder();
             for (String word : sentence.trim().split("\\s+")) {
+                // Skip punctuation — it passes through the main tokenizer unchanged.
                 if (word.isEmpty() || isPunctuation(word)) continue;
+                // Lowercase capitalized words before querying the analyzer; the
+                // <uppercase> marker is the runtime concern, not training's.
                 String processed = Character.isUpperCase(word.charAt(0))
                         ? word.toLowerCase(TURKISH_LOCALE) : word;
+                // No FSM parse => OOV: send the *original* (case-preserved) word
+                // to the BPE so it sees real-world surface forms.
                 if (analyzer.morphologicalAnalysis(processed).size() == 0) {
                     if (oov.length() > 0) oov.append(' ');
                     oov.append(word);
@@ -156,6 +166,10 @@ public class TurkishTokenizer extends Tokenizer {
 
     /**
      * Tokenizes a single word per Algorithm 1.
+     * @param word The input word (may include leading uppercase or punctuation).
+     * @return Ordered list of tokens: optionally an {@code <uppercase>} marker,
+     *         then the space-prefixed root followed by canonical affix tokens,
+     *         or BPE pieces if the word is OOV.
      */
     @Override
     public List<String> tokenize(String word) {
@@ -163,29 +177,42 @@ public class TurkishTokenizer extends Tokenizer {
 
         List<String> result = new ArrayList<>();
 
+        // Pass 1: punctuation is a leaf — emit verbatim, no morphology applies.
         if (isPunctuation(word)) {
             result.add(word);
             return result;
         }
 
+        // Pass 2: capitalization is lifted into a dedicated <uppercase> marker
+        // (Bayram 2026 convention) so the morphological analyzer sees a
+        // case-normalized form and decoders can reconstruct casing later.
         String processed = word;
         if (Character.isUpperCase(word.charAt(0))) {
             result.add(UPPERCASE_TOKEN);
             processed = word.toLowerCase(TURKISH_LOCALE);
         }
 
+        // Pass 3: query the FSM. If no parse exists the word is OOV; route it
+        // to the BPE fallback (adding the leading-space root marker to the
+        // first piece so byte-level decoders preserve word boundaries).
         FsmParseList parses = analyzer.morphologicalAnalysis(processed);
         if (parses.size() == 0) {
             result.addAll(prefixFirstPiece(fallback.tokenize(processed)));
             return result;
         }
 
+        // Pass 4: among the FSM's competing parses pick the one with the
+        // shortest root + most suffixes (paper's heuristic) and emit its
+        // root + canonical-affix sequence.
         FsmParse best = selectMostSuffixedParse(parses);
         result.addAll(extractTokens(best, processed));
         return result;
     }
 
-    /** Returns the trainable BPE fallback. */
+    /**
+     * Returns the trainable BPE fallback.
+     * @return The inner BPE tokenizer used for OOV words.
+     */
     public Tokenizer getFallbackTokenizer() {
         return fallback;
     }
@@ -228,20 +255,35 @@ public class TurkishTokenizer extends Tokenizer {
     private List<String> extractTokens(FsmParse parse, String inputWord) {
         List<String> tokens = new ArrayList<>();
         String transition = parse.transitionList();
+
+        // Degenerate case: parse has no tags, just emit the root.
         if (transition == null || transition.isEmpty()) {
             tokens.add(ROOT_PREFIX + matchRootToInput(parse.getLastLemma(), inputWord));
             return tokens;
         }
+
+        // FSM transitions are grouped by derivational boundaries (^DB+).
+        // Each group is a sequence of '+'-separated tags; the first tag of
+        // the first group is the root lemma, the rest are inflectional /
+        // derivational affixes.
         String[] groups = transition.split("\\^DB\\+");
         boolean rootAdded = false;
         for (String group : groups) {
             String[] parts = group.split("\\+");
             int startIndex = 0;
+
+            // Only the very first group contributes the root. Reconcile the
+            // FSM lemma against the input surface (handles lenition like
+            // kitap -> kitab) so the emitted root prefixes the original word.
             if (!rootAdded) {
                 tokens.add(ROOT_PREFIX + matchRootToInput(parts[0], inputWord));
                 rootAdded = true;
                 startIndex = 1;
             }
+
+            // Emit each tag in the group: drop POS/default markers, map
+            // allomorphic FSM tags to canonical names (A3PL->PL, etc.),
+            // and pass through derivational morphemes unchanged.
             for (int i = startIndex; i < parts.length; i++) {
                 String tag = parts[i];
                 if (tag.isEmpty() || DROP_TAGS.contains(tag)) continue;
@@ -258,6 +300,10 @@ public class TurkishTokenizer extends Tokenizer {
      * softened form whose surface actually prefixes the input. This helps recover
      * surface roots for forms like {@code kitabi} / {@code kitabı}
      * where lemma {@code kitap} appears as surface {@code kitab}.
+     * @param lemma     The lemma returned by the FSM analyzer.
+     * @param inputWord The original surface form being tokenized.
+     * @return Either the lemma itself, or its lenited variant when that variant
+     *         prefixes {@code inputWord}.
      */
     private String matchRootToInput(String lemma, String inputWord) {
         if (lemma == null || lemma.isEmpty()) return lemma == null ? "" : lemma;
@@ -314,10 +360,12 @@ public class TurkishTokenizer extends Tokenizer {
 
         @Override
         public void train(List<String> corpus) {
+            // Reset state — train() is idempotent w.r.t. previous calls.
             mergeRules.clear();
             mergeRank.clear();
             vocabulary.clear();
 
+            // Step 1: collect word-frequency counts across the corpus.
             Map<String, Integer> wordCounts = new LinkedHashMap<>();
             for (String sentence : corpus) {
                 for (String word : sentence.trim().split("\\s+")) {
@@ -325,6 +373,10 @@ public class TurkishTokenizer extends Tokenizer {
                 }
             }
 
+            // Step 2: explode each unique word into its character-level
+            // symbol sequence with the end-of-word marker on the last char
+            // (subword-nmt convention). Wrap with its frequency for later
+            // statistics passes.
             List<WordEntry> sortedVocab = new ArrayList<>(wordCounts.size());
             for (Map.Entry<String, Integer> e : wordCounts.entrySet()) {
                 String word = e.getKey();
@@ -335,18 +387,28 @@ public class TurkishTokenizer extends Tokenizer {
                 symbols.add(word.charAt(word.length() - 1) + EOW);
                 sortedVocab.add(new WordEntry(symbols, e.getValue()));
             }
+            // Frequency-sort so the initial vocabulary additions are
+            // deterministic and the most-common chars are inserted first.
             sortedVocab.sort((a, b) -> Integer.compare(b.freq, a.freq));
+            // Seed the vocabulary with every initial symbol (all single chars).
             for (WordEntry we : sortedVocab) vocabulary.addAll(we.symbols);
 
+            // Step 3: BPE merge loop. Each iteration finds the most frequent
+            // adjacent symbol pair across the whole corpus, records it as a
+            // merge rule, and rewrites every word so future iterations see
+            // the merged symbol. Stops when budget exhausted, no pairs left,
+            // or the best remaining pair falls below MIN_FREQUENCY.
             int numSymbols = Math.max(0, vocabSize - vocabulary.size());
             for (int iter = 0; iter < numSymbols; iter++) {
                 Map<Pair, Integer> stats = pairStatistics(sortedVocab);
                 if (stats.isEmpty()) break;
                 Pair best = pickBestPair(stats);
                 if (best == null || stats.get(best) < MIN_FREQUENCY) break;
+                // Record the merge: rule order = its rank (lowest wins at apply time).
                 mergeRules.add(new String[]{best.left, best.right});
                 mergeRank.put(best.left + " " + best.right, mergeRules.size() - 1);
                 vocabulary.add(best.left + best.right);
+                // Rewrite every word with the new merge applied.
                 for (WordEntry we : sortedVocab) {
                     we.symbols = mergeAdjacent(we.symbols, best.left, best.right);
                 }
@@ -355,6 +417,8 @@ public class TurkishTokenizer extends Tokenizer {
 
         @Override
         public List<String> tokenize(String word) {
+            // Untrained fallback: return raw character split so the caller
+            // still gets a usable segmentation.
             if (mergeRules.isEmpty()) {
                 List<String> chars = new ArrayList<>(word.length());
                 for (int i = 0; i < word.length(); i++) chars.add(String.valueOf(word.charAt(i)));
@@ -363,10 +427,15 @@ public class TurkishTokenizer extends Tokenizer {
             if (word.isEmpty()) return Collections.emptyList();
             if (word.length() == 1) return Collections.singletonList(word);
 
+            // Initial state: one symbol per character, EOW glued to the last.
             List<String> symbols = new ArrayList<>(word.length());
             for (int i = 0; i < word.length() - 1; i++) symbols.add(String.valueOf(word.charAt(i)));
             symbols.add(word.charAt(word.length() - 1) + EOW);
 
+            // Greedy lowest-rank-wins encoding: each pass scans all adjacent
+            // pairs, finds the one whose merge rule has the lowest rank
+            // (i.e. earliest learned), and applies it. Repeat until no
+            // adjacent pair matches any merge rule.
             while (symbols.size() > 1) {
                 int bestRank = Integer.MAX_VALUE;
                 String bestLeft = null, bestRight = null;
@@ -381,6 +450,8 @@ public class TurkishTokenizer extends Tokenizer {
                 if (bestLeft == null) break;
                 symbols = mergeAdjacent(symbols, bestLeft, bestRight);
             }
+            // Strip EOW from the last symbol before returning — it's an
+            // internal training marker, not part of the output token set.
             if (!symbols.isEmpty()) {
                 String last = symbols.get(symbols.size() - 1);
                 if (last.equals(EOW)) {

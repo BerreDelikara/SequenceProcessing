@@ -13,14 +13,28 @@ final class JsonObjectParser {
 
     private JsonObjectParser() {}
 
+    /**
+     * Parses a flat JSON object string into a {@link LinkedHashMap} preserving
+     * insertion order.
+     * @param text JSON text, expected to be a single object with string keys
+     *             and integer values.
+     * @return Map of keys to integer values.
+     * @throws RuntimeException if the input is not well-formed JSON of the
+     *                          supported subset.
+     */
     static Map<String, Integer> parse(String text) {
         State s = new State(text);
+        // Consume the opening brace of the top-level object.
         skipWs(s);
         expect(s, '{');
         Map<String, Integer> result = new LinkedHashMap<>();
+        // Empty-object fast path: '{}' returns an empty map.
         skipWs(s);
         if (peek(s) == '}') { s.i++; return result; }
 
+        // Read "key": value pairs separated by commas until we hit '}'.
+        // LinkedHashMap preserves vocab.json's original ordering, which
+        // matters because token IDs are positional.
         while (true) {
             skipWs(s);
             String key = readString(s);
@@ -29,6 +43,8 @@ final class JsonObjectParser {
             skipWs(s);
             int value = readInt(s);
             result.put(key, value);
+            // After each pair: ',' means another pair follows, '}' ends
+            // the object, anything else is malformed.
             skipWs(s);
             char c = peek(s);
             if (c == ',') { s.i++; continue; }
@@ -39,9 +55,13 @@ final class JsonObjectParser {
     }
 
     private static String readString(State s) {
+        // Consume the opening quote.
         if (peek(s) != '"') throw err(s, "expected '\"' to start string");
         s.i++;
         StringBuilder sb = new StringBuilder();
+        // Walk char-by-char until the matching close quote. Backslash
+        // introduces an escape sequence handled below; everything else
+        // is appended verbatim.
         while (s.i < s.text.length()) {
             char c = s.text.charAt(s.i);
             if (c == '"') { s.i++; return sb.toString(); }
@@ -49,6 +69,8 @@ final class JsonObjectParser {
                 s.i++;
                 if (s.i >= s.text.length()) throw err(s, "unterminated escape");
                 char esc = s.text.charAt(s.i++);
+                // Standard JSON escapes plus the 4-hex-digit unicode escape
+                // (single BMP code unit only — no surrogate pair handling).
                 switch (esc) {
                     case '"': sb.append('"'); break;
                     case '\\': sb.append('\\'); break;

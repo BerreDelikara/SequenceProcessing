@@ -36,6 +36,9 @@ public class TabiBERTTokenizer extends ByteLevelBPETokenizer {
                     + "|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
             Pattern.UNICODE_CHARACTER_CLASS);
 
+    /**
+     * Loads the bundled TabiBERT vocabulary and merge rules from the classpath.
+     */
     public TabiBERTTokenizer() {
         super();
     }

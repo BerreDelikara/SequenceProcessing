@@ -35,14 +35,22 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
     public static final Map<Character, Integer> CHAR_TO_BYTE;
 
     static {
+        // Build the GPT-2 byte-to-unicode bijection.
         int[] codepoints = new int[256];
         boolean[] selfMapped = new boolean[256];
+        // Three ranges of printable bytes that already display as themselves:
+        // ASCII printable, Latin-1 supplement above NBSP (minus a few control-
+        // adjacent codepoints), and the rest of Latin-1.
         for (int b = '!'; b <= '~'; b++) selfMapped[b] = true;
         for (int b = 0xA1; b <= 0xAC; b++) selfMapped[b] = true;
         for (int b = 0xAE; b <= 0xFF; b++) selfMapped[b] = true;
+        // Self-mapped bytes use their own value as the codepoint.
         for (int b = 0; b < 256; b++) {
             if (selfMapped[b]) codepoints[b] = b;
         }
+        // The remaining 68 non-printable bytes get reassigned to the
+        // contiguous block U+0100..U+0143 so every byte ends up mapping to
+        // a unique, visible BMP character.
         int n = 0;
         for (int b = 0; b < 256; b++) {
             if (!selfMapped[b]) {
@@ -50,6 +58,7 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
                 n++;
             }
         }
+        // Materialize both directions of the mapping.
         Map<Character, Integer> inverse = new HashMap<>(256);
         for (int b = 0; b < 256; b++) {
             BYTE_TO_CHAR[b] = (char) codepoints[b];
@@ -81,27 +90,47 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
         this.unknownTokenId = resolveUnknownTokenId(v);
     }
 
-    /** Classpath resource path for the vocab.json (e.g. {@code "/cosmos-gpt2/vocab.json"}). */
+    /**
+     * Classpath resource path for the vocab.json (e.g. {@code "/cosmos-gpt2/vocab.json"}).
+     * @return Absolute classpath resource path to the model's vocab.json.
+     */
     protected abstract String vocabResourcePath();
 
-    /** Classpath resource path for the merges.txt. */
+    /**
+     * Classpath resource path for the merges.txt.
+     * @return Absolute classpath resource path to the model's merges.txt.
+     */
     protected abstract String mergesResourcePath();
 
-    /** Pre-tokenizer regex applied before BPE. Must use the same semantics as the HF tokenizer. */
+    /**
+     * Pre-tokenizer regex applied before BPE. Must use the same semantics as the HF tokenizer.
+     * @return Compiled regex used to split input into pre-BPE chunks.
+     */
     protected abstract Pattern preTokenizerPattern();
 
     /**
      * Returns the integer ID of this tokenizer's unknown-token, or {@code -1}
      * if there is none and OOV bytes should be silently dropped.
+     * @param vocab Loaded token-to-id vocabulary, used to look up the model's
+     *              unknown-token symbol.
+     * @return The unknown-token ID, or {@code -1} when no UNK is defined.
      */
     protected abstract int resolveUnknownTokenId(Map<String, Integer> vocab);
 
+    /**
+     * No-op: byte-level BPE tokenizers ship with pre-trained vocab and merges.
+     * @param corpus Ignored.
+     */
     @Override
     public final void train(List<String> corpus) {
         // Pre-trained; no-op.
     }
 
-    /** Tokenizes a single pre-tokenized chunk through byte mapping + BPE. */
+    /**
+     * Tokenizes a single pre-tokenized chunk through byte mapping + BPE.
+     * @param chunk One pre-tokenized substring (output of the regex split).
+     * @return BPE token pieces produced from {@code chunk} after byte mapping.
+     */
     @Override
     public List<String> tokenize(String chunk) {
         if (chunk == null || chunk.isEmpty()) return Collections.emptyList();
@@ -113,6 +142,8 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
      * Encodes a sentence to BPE tokens, applying the pre-tokenizer regex first.
      * Overrides the base class which splits on whitespace (that would strip
      * the leading-space cues byte-level BPE depends on).
+     * @param sentence Full input sentence.
+     * @return Concatenated BPE tokens across every regex-matched chunk.
      */
     @Override
     public List<String> encode(String sentence) {
@@ -125,7 +156,12 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
         return out;
     }
 
-    /** Encodes a sentence to integer token IDs. */
+    /**
+     * Encodes a sentence to integer token IDs.
+     * @param sentence Full input sentence.
+     * @return Token IDs for each piece, substituting the UNK ID for OOV pieces
+     *         when one is defined (otherwise OOV pieces are dropped).
+     */
     public List<Integer> encodeIds(String sentence) {
         List<String> tokens = encode(sentence);
         List<Integer> ids = new ArrayList<>(tokens.size());
@@ -140,7 +176,11 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
         return ids;
     }
 
-    /** Decodes a token-ID sequence back to a UTF-8 string. */
+    /**
+     * Decodes a token-ID sequence back to a UTF-8 string.
+     * @param ids Token IDs produced by {@link #encodeIds(String)}.
+     * @return The reconstructed string. Unknown IDs are skipped.
+     */
     public String decode(List<Integer> ids) {
         StringBuilder mapped = new StringBuilder();
         for (Integer id : ids) {
@@ -150,19 +190,30 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
         return byteDecode(mapped.toString());
     }
 
-    /** Number of entries in the vocabulary. */
+    /**
+     * Number of entries in the vocabulary.
+     * @return Vocabulary size as loaded from vocab.json.
+     */
     public int getVocabularySize() {
         return vocab.size();
     }
 
-    /** Unmodifiable view of the underlying vocabulary (token -> id). */
+    /**
+     * Unmodifiable view of the underlying vocabulary (token -> id).
+     * @return Read-only token-to-id map preserving insertion order.
+     */
     public Map<String, Integer> getVocabulary() {
         return vocab;
     }
 
     // ─── Byte-level mapping ────────────────────────────────────────────────
 
-    /** UTF-8 encodes the chunk, then maps each byte through {@link #BYTE_TO_CHAR}. */
+    /**
+     * UTF-8 encodes the chunk, then maps each byte through {@link #BYTE_TO_CHAR}.
+     * @param chunk Pre-tokenized substring to byte-map.
+     * @return A string where each char represents one source UTF-8 byte under
+     *         the GPT-2 byte-to-unicode mapping.
+     */
     protected static String byteEncode(String chunk) {
         byte[] bytes = chunk.getBytes(StandardCharsets.UTF_8);
         StringBuilder out = new StringBuilder(bytes.length);
@@ -170,7 +221,11 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
         return out.toString();
     }
 
-    /** Reverses {@link #byteEncode}: each char back to its byte, then UTF-8 decode. */
+    /**
+     * Reverses {@link #byteEncode}: each char back to its byte, then UTF-8 decode.
+     * @param mapped Byte-mapped string produced by {@link #byteEncode(String)}.
+     * @return The original UTF-8 string.
+     */
     protected static String byteDecode(String mapped) {
         byte[] bytes = new byte[mapped.length()];
         int n = 0;
@@ -184,20 +239,26 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
     // ─── BPE merge loop (port of apply_bpe.py) ─────────────────────────────
 
     private List<String> bpe(String word) {
+        // Cache hit: this byte-mapped chunk has been encoded before.
+        // Hand back a defensive copy so callers can mutate freely.
         List<String> cached = bpeCache.get(word);
         if (cached != null) return new ArrayList<>(cached);
 
+        // Trivial-length fast paths — nothing to merge.
         if (word.length() <= 1) {
             List<String> single = Collections.singletonList(word);
             bpeCache.put(word, single);
             return new ArrayList<>(single);
         }
 
+        // Initial state: one symbol per character of the byte-mapped chunk.
         List<String> symbols = new ArrayList<>(word.length());
         for (int i = 0; i < word.length(); i++) {
             symbols.add(String.valueOf(word.charAt(i)));
         }
 
+        // Apply merges lowest-rank-first until no adjacent pair matches a
+        // rule. This is the exact greedy strategy of HF's apply_bpe.py.
         while (symbols.size() > 1) {
             int bestRank = Integer.MAX_VALUE;
             String bestLeft = null, bestRight = null;
@@ -213,9 +274,10 @@ public abstract class ByteLevelBPETokenizer extends Tokenizer {
             symbols = mergeAdjacent(symbols, bestLeft, bestRight);
         }
 
-        List<String> result = new ArrayList<>(symbols);
-        bpeCache.put(word, result);
-        return new ArrayList<>(result);
+        // Memoize before returning; store an immutable snapshot, hand out
+        // a copy so the cached entry stays clean.
+        bpeCache.put(word, new ArrayList<>(symbols));
+        return symbols;
     }
 
     private static List<String> mergeAdjacent(List<String> symbols, String left, String right) {
