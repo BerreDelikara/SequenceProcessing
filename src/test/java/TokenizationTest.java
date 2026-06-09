@@ -180,7 +180,7 @@ public class TokenizationTest {
 
     @Test
     public void mursitTokenizesTurkishDiacritics() {
-        List<String> tokens = mursit.encode("şimdi çığlık");
+        List<String> tokens = mursit.encode("şimdi çığlık olmaktadır");
         assertFalse(tokens.isEmpty());
     }
 

@@ -253,6 +253,7 @@ public class TurkishTokenizer extends Tokenizer {
     private List<String> extractTokens(FsmParse parse, String inputWord) {
         List<String> tokens = new ArrayList<>();
         String transition = parse.transitionList();
+        
 
         // Degenerate case: parse has no tags, just emit the root.
         if (transition == null || transition.isEmpty()) {
@@ -266,6 +267,8 @@ public class TurkishTokenizer extends Tokenizer {
         // derivational affixes.
         String[] groups = transition.split("\\^DB\\+");
         boolean rootAdded = false;
+        String surfaceRoot = null; //Ünsüz benzeşmesi checker
+        boolean hasMeaningfulSuffixAfterRoot = false;
         for (String group : groups) {
             String[] parts = group.split("\\+");
             int startIndex = 0;
@@ -274,7 +277,8 @@ public class TurkishTokenizer extends Tokenizer {
             // FSM lemma against the input surface (handles lenition like
             // kitap -> kitab) so the emitted root prefixes the original word.
             if (!rootAdded) {
-                tokens.add(ROOT_PREFIX + matchRootToInput(parts[0], inputWord));
+                surfaceRoot = matchRootToInput(parts[0], inputWord);
+                tokens.add(ROOT_PREFIX + surfaceRoot);
                 rootAdded = true;
                 startIndex = 1;
             }
@@ -286,7 +290,17 @@ public class TurkishTokenizer extends Tokenizer {
                 String tag = parts[i];
                 if (tag.isEmpty() || DROP_TAGS.contains(tag)) continue;
                 String mapped = AFFIX_MAP.get(tag);
-                tokens.add(mapped != null ? mapped : tag);
+                String token = mapped != null ? mapped : tag;
+
+                // Added: connect ünsüz benzeşmesi to suffix-side changes.
+                // Example: kitap + LOC => kitapta, so LOC is marked as hardened.
+                if (surfaceRoot != null && hasConsonantAssimilation(surfaceRoot, token)&& !hasMeaningfulSuffixAfterRoot) {
+                    token = token + "_HARD";
+                }
+
+
+                tokens.add(token);
+                hasMeaningfulSuffixAfterRoot = true;
             }
         }
         return tokens;
@@ -308,7 +322,7 @@ public class TurkishTokenizer extends Tokenizer {
         if (inputWord == null || inputWord.startsWith(lemma)) return lemma;
         char last = lemma.charAt(lemma.length() - 1);
         char softened;
-        switch (last) {
+        switch (last) { // ünsüz yumuşaması
             case 'p': softened = 'b'; break;
             case 't': softened = 'd'; break;
             case 'k': softened = 'ğ'; break;
@@ -317,6 +331,44 @@ public class TurkishTokenizer extends Tokenizer {
         }
         String candidate = lemma.substring(0, lemma.length() - 1) + softened;
         return inputWord.startsWith(candidate) ? candidate : lemma;
+    }
+
+     /**
+     * Checks whether a suffix tag is affected by Turkish consonant assimilation
+     * after a hard consonant.
+     *
+     * Ünsüz benzeşmesi:
+     * If the root ends with f, s, t, k, ç, ş, h, p,
+     * suffixes that normally begin with c, d, g surface with ç, t, k.
+     *
+     * Examples:
+     * kitap + LOC -> kitapta
+     * ağaç + ABL -> ağaçtan
+     * bak + PAST -> baktı
+     */
+    private boolean hasConsonantAssimilation(String root, String tag) {
+        if (root == null || root.isEmpty() || tag == null || tag.isEmpty()) {
+            return false;
+        }
+
+        char lastRootChar = root.charAt(root.length() - 1);
+
+        if (!isHardConsonant(lastRootChar)) {
+            return false;
+        }
+
+        return tag.equals("LOC")      // -da/-de -> -ta/-te
+                || tag.equals("ABL")  // -dan/-den -> -tan/-ten
+                || tag.equals("PAST") // -dı/-di -> -tı/-ti
+                || tag.equals("AGT"); // -cı/-ci -> -çı/-çi
+    }
+
+    /**
+     * Turkish hard consonants: f, s, t, k, ç, ş, h, p.
+     */
+    private boolean isHardConsonant(char c) {
+        return c == 'f' || c == 's' || c == 't' || c == 'k'
+                || c == 'ç' || c == 'ş' || c == 'h' || c == 'p';
     }
 
     private boolean isPunctuation(String word) {
